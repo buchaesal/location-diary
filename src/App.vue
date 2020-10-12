@@ -118,6 +118,7 @@
         </v-card>
       </v-dialog>
 
+      <span>{{ address }}</span>
     </v-main>
   </v-app>
 </template>
@@ -136,15 +137,13 @@ export default {
   data: () => ({
     dialog : false,
     dialog2 : false,
-    items : [
-      {title:'일기쓰기'},
-      {title:'이전 일기 보기'}
-    ]
+    address: ''
   }),
 
   methods : {
     initMap() {
       var container = document.getElementById('map');
+      var that = this;
       var options = {
         center: new kakao.maps.LatLng(33.450701, 126.570667),
         level: 3
@@ -153,28 +152,66 @@ export default {
       var marker = new kakao.maps.Marker({
         position: map.getCenter()
       });
-      marker.setMap(map);
 
+      // HTML5의 geolocation으로 사용할 수 있는지 확인합니다
+      if (navigator.geolocation) {
 
-      var that = this;
+        // GeoLocation을 이용해서 접속 위치를 얻어옵니다
+        navigator.geolocation.getCurrentPosition(function(position) {
+
+          var lat = position.coords.latitude, // 위도
+                  lon = position.coords.longitude; // 경도
+
+          options.center = new kakao.maps.LatLng(lat, lon);
+          map.setCenter(options.center);
+          marker.setPosition(options.center);
+          marker.setMap(map);
+
+          searchDetailAddrFromCoords(options.center, function (result, status) {
+            if (status === kakao.maps.services.Status.OK) {
+              var detailAddr = result[0].road_address ? `도로명주소 :  ${result[0].road_address.address_name}` : '';
+              detailAddr += `지번 주소 :  ${result[0].address.address_name}` ;
+
+              that.address = detailAddr;
+            }
+          });
+
+        });
+      } else { // HTML5의 GeoLocation을 사용할 수 없을때 마커 표시 위치와 인포윈도우 내용을 설정합니다
+                console.log('geolocation을 사용할수 없어요..');
+        marker.setMap(map);
+
+      }
+
 
       kakao.maps.event.addListener(marker, 'click', function() {
         // 마커에 클릭 이벤트가 발생하면 인포윈도우를 마커위에 표시합니다.
         that.dialog = true;
       });
 
+      // 주소-좌표 변환 객체를 생성합니다
+      var geocoder = new kakao.maps.services.Geocoder();
+
+      function searchDetailAddrFromCoords(coords, callback) {
+        // 좌표로 법정동 상세 주소 정보를 요청합니다
+        geocoder.coord2Address(coords.getLng(), coords.getLat(), callback);
+      }
+
       // 지도에 클릭 이벤트를 등록합니다
       // 지도를 클릭하면 마지막 파라미터로 넘어온 함수를 호출합니다
       kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+        searchDetailAddrFromCoords(mouseEvent.latLng, function (result, status) {
+          if (status === kakao.maps.services.Status.OK) {
+            var detailAddr = result[0].road_address ? `도로명주소 :  ${result[0].road_address.address_name}` : '';
+            detailAddr += `지번 주소 :  ${result[0].address.address_name}` ;
 
-        // 클릭한 위도, 경도 정보를 가져옵니다
-        var latlng = mouseEvent.latLng;
+            // 마커를 클릭한 위치에 표시합니다
+            marker.setPosition(mouseEvent.latLng);
+            marker.setMap(map);
 
-        // 마커 위치를 클릭한 위치로 옮깁니다
-        marker.setPosition(latlng);
-        //
-        // var message = '클릭한 위치의 위도는 ' + latlng.getLat() + ' 이고, ';
-        // message += '경도는 ' + latlng.getLng() + ' 입니다';
+            that.address = detailAddr;
+          }
+        });
 
       });
 
@@ -182,7 +219,7 @@ export default {
       addScript() {
       const script = document.createElement('script'); /* global kakao */
         script.onload = () => kakao.maps.load(this.initMap);
-        script.src = 'http://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=2d05efef098285ddc71f867b644dc65a';
+        script.src = 'http://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=2d05efef098285ddc71f867b644dc65a&libraries=services';
         document.head.appendChild(script);
     }
   }
